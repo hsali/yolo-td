@@ -4,7 +4,6 @@ from keras.callbacks import ModelCheckpoint
 from keras.optimizers import Adam
 from sklearn.model_selection import train_test_split
 
-from Utils import *
 
 import numpy as np
 
@@ -23,37 +22,6 @@ grid_h = 16
 # optimizer
 opt = Adam(lr=0.0001, beta_1=0.9, beta_2=0.999, epsilon=1e-08, decay=0.0)
 
-
-def yolo_loss_func(y_true, y_pred):
-    # y_true : 16,16,1,5
-    # y_pred : 16,16,1,5
-    l_coords = 5.0
-    l_noob = 0.5
-    coords = y_true[:, :, :, :, 0] * l_coords
-    noobs = (-1 * (y_true[:, :, :, :, 0] - 1) * l_noob)
-    p_pred = y_pred[:, :, :, :, 0]
-    p_true = y_true[:, :, :, :, 0]
-    x_true = y_true[:, :, :, :, 1]
-    x_pred = y_pred[:, :, :, :, 1]
-    yy_true = y_true[:, :, :, :, 2]
-    yy_pred = y_pred[:, :, :, :, 2]
-    w_true = y_true[:, :, :, :, 3]
-    w_pred = y_pred[:, :, :, :, 3]
-    h_true = y_true[:, :, :, :, 4]
-    h_pred = y_pred[:, :, :, :, 4]
-
-    p_loss_absent = K.sum(K.square(p_pred - p_true) * noobs)
-    p_loss_present = K.sum(K.square(p_pred - p_true))
-    x_loss = K.sum(K.square(x_pred - x_true) * coords)
-    yy_loss = K.sum(K.square(yy_pred - yy_true) * coords)
-    xy_loss = x_loss + yy_loss
-    w_loss = K.sum(K.square(K.sqrt(w_pred) - K.sqrt(w_true)) * coords)
-    h_loss = K.sum(K.square(K.sqrt(h_pred) - K.sqrt(h_true)) * coords)
-    wh_loss = w_loss + h_loss
-
-    loss = p_loss_absent + p_loss_present + xy_loss + wh_loss
-
-    return loss
 
 
 def load_model(strr):
