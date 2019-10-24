@@ -160,7 +160,7 @@ def load_model(model_path):
     -------
     return loaded_model
     """
-    json_file = open(os.path.join(model_path,'text_detect_model.json'), 'r')
+    json_file = open(os.path.join(model_path, 'text_detect_model.json'), 'r')
     loaded_model_json = json_file.read()
     json_file.close()
     loaded_model = model_from_json(loaded_model_json)
@@ -326,3 +326,45 @@ def show_image(img):
     """
     plt.imshow(img)
     plt.show()
+
+
+def accuracy_checking(model, X, Y):
+    data_checks = []
+    for i in range(X.shape[0]):
+        print("validating and checking: {}/{}".format(i, X.shape[0]))
+        pred_out, img = predict(model, X[i:i + 1])
+        rects = predicted_box(pred_out)
+        pred_rect_len = len(rects)
+        act_rects = predicted_box(Y[i:i + 1])
+        act_rects_len = len(act_rects)
+        data_checks.append([act_rects_len, pred_rect_len, act_rects_len == pred_rect_len])
+
+    accuracy = sum([1 for x in data_checks if x[2] == True]) / len(data_checks) * 100.00
+
+    return accuracy
+
+
+def predict_func(model, inp, name, image_save=False):
+    """
+    predict image and show and save
+    Parameters
+    ----------
+    model
+    inp
+    name
+    image_save
+
+    Returns
+    -------
+
+    """
+    r_img = None
+    pred_out, img = predict(model, inp)
+
+    rects = predicted_box(pred_out)
+    for rect in rects:
+        r_img = draw_rectangle(img, rect)
+    print('draw rectangle image')
+    show_image(r_img)
+    if image_save:
+        save_image(r_img, name)
