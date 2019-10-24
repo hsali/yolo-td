@@ -1,14 +1,13 @@
 import os
-
-import numpy as np
-from keras import backend as K
-from keras.models import model_from_json
-from keras.optimizers import Adam
+import cv2
+import matplotlib.pyplot as plt
 from keras.applications.mobilenetv2 import MobileNetV2
-from keras.callbacks import ModelCheckpoint
 from keras.layers import *
 from keras.models import Model
-#output dims -> (1,x,x,1,5)
+from keras.models import model_from_json
+from keras.optimizers import Adam
+
+# output dims -> (1,x,x,1,5)
 
 # boxes = decode_to_boxes(output)  output to boxes
 # corner_boxes = boxes_to_corners(boxes) boxes to corners
@@ -16,8 +15,9 @@ from keras.models import Model
 #                   iou()
 
 OUTPUT_FOLDER_PATH = "Results2"
-MODEL_PATH = "model1"
+MODEL_PATH = "model"
 DATA_PATH = "Data"
+IOU = 0.5
 
 # Variable Definition
 img_w = 512
@@ -27,7 +27,6 @@ classes = 1
 info = 5
 grid_w = 16
 grid_h = 16
-
 
 # optimizer
 optimizer = Adam(lr=0.0001, beta_1=0.9, beta_2=0.999, epsilon=1e-08, decay=0.0)
@@ -145,7 +144,7 @@ def save_model(model, model_path="model1"):
 
     """
     model_json = model.to_json()
-    with open(os.path.join(model_path,"text_detect_model.json"), "w") as json_file:
+    with open(os.path.join(model_path, "text_detect_model.json"), "w") as json_file:
         json_file.write(model_json)
     model.save_weights(os.path.join(model_path, 'text_detect.h5'))
 
@@ -161,93 +160,169 @@ def load_model(model_path):
     -------
     return loaded_model
     """
-    json_file = open(model_path, 'r')
+    json_file = open(os.path.join(model_path,'text_detect_model.json'), 'r')
     loaded_model_json = json_file.read()
     json_file.close()
     loaded_model = model_from_json(loaded_model_json)
+    loaded_model.load_weights(os.path.join(model_path, 'text_detect.h5'))
     return loaded_model
 
 
-def decode_to_boxes(output , ht , wd):
-    #output : (x,x,1,5)
-    #x,y,h,w
+def decode_to_boxes(output, ht, wd):
+    # output : (x,x,1,5)
+    # x,y,h,w
 
     img_ht = ht
     img_wd = wd
     threshold = 0.5
-    grid_h,grid_w = output.shape[:2]
+    grid_h, grid_w = output.shape[:2]
     final_boxes = []
     scores = []
 
     for i in range(grid_h):
         for j in range(grid_w):
-            if output[i,j,0,0] > threshold:
+            if output[i, j, 0, 0] > threshold:
+                temp = output[i, j, 0, 1:5]
 
-                temp = output[i,j,0,1:5]
-                
-                x_unit = ((j + (temp[0]))/grid_w)*img_wd
-                y_unit = ((i + (temp[1]))/grid_h)*img_ht
-                width = temp[2]*img_wd*1.3
-                height = temp[3]*img_ht*1.3
-                
-                final_boxes.append([x_unit - width/2,y_unit - height/2 ,x_unit + width/2,y_unit + height/2])
-                scores.append(output[i,j,0,0])
-    
-    return final_boxes,scores
+                x_unit = ((j + (temp[0])) / grid_w) * img_wd
+                y_unit = ((i + (temp[1])) / grid_h) * img_ht
+                width = temp[2] * img_wd * 1.3
+                height = temp[3] * img_ht * 1.3
+
+                final_boxes.append([x_unit - width / 2, y_unit - height / 2, x_unit + width / 2, y_unit + height / 2])
+                scores.append(output[i, j, 0, 0])
+
+    return final_boxes, scores
 
 
-def iou(box1,box2):
+def iou(box1, box2):
+    x1 = max(box1[0], box2[0])
+    x2 = min(box1[2], box2[2])
+    y1 = max(box1[1], box2[1])
+    y2 = min(box1[3], box2[3])
 
-    x1 = max(box1[0],box2[0])
-    x2 = min(box1[2],box2[2])
-    y1 = max(box1[1] ,box2[1])
-    y2 = min(box1[3],box2[3])
-    
-    inter = (x2 - x1)*(y2 - y1)
-    area1 = (box1[2] - box1[0])*(box1[3] - box1[1])
-    area2 = (box2[2] - box2[0])*(box2[3] - box2[1])
+    inter = (x2 - x1) * (y2 - y1)
+    area1 = (box1[2] - box1[0]) * (box1[3] - box1[1])
+    area2 = (box2[2] - box2[0]) * (box2[3] - box2[1])
     fin_area = area1 + area2 - inter
-        
-    iou = inter/fin_area
-    
+
+    iou = inter / fin_area
+
     return iou
 
 
-def non_max(boxes , scores , iou_num):
-
+def non_max(boxes, scores, iou_num):
     scores_sort = scores.argsort().tolist()
     keep = []
-    
+
     while len(scores_sort):
-        
+
         index = scores_sort.pop()
         keep.append(index)
-        
-        if(len(scores_sort) == 0):
+
+        if (len(scores_sort) == 0):
             break
-    
+
         iou_res = []
-    
+
         for i in scores_sort:
-            iou_res.append(iou(boxes[index] , boxes[i]))
-        
+            iou_res.append(iou(boxes[index], boxes[i]))
+
         iou_res = np.array(iou_res)
         filtered_indexes = set((iou_res > iou_num).nonzero()[0])
 
-        scores_sort = [v for (i,v) in enumerate(scores_sort) if i not in filtered_indexes]
-    
+        scores_sort = [v for (i, v) in enumerate(scores_sort) if i not in filtered_indexes]
+
     final = []
-    
+
     for i in keep:
         final.append(boxes[i])
-    
+
     return final
 
 
-def decode(output , ht , wd , iou):
-
-    boxes, scores = decode_to_boxes(output ,ht ,wd)
-    boxes = non_max(boxes,np.array(scores) , iou)
+def decode(output, ht, wd, iou):
+    boxes, scores = decode_to_boxes(output, ht, wd)
+    boxes = non_max(boxes, np.array(scores), iou)
     return boxes
-    
 
+
+def predict(model, input):
+    """
+    predict images
+    Parameters
+    ----------
+    model
+    input
+
+    Returns
+    -------
+
+    """
+    ans = model.predict(input)
+    img = ((input + 1) / 2)
+    img = img[0]
+    return ans, img
+
+
+def draw_rectangle(img, rect):
+    """
+    draw rectangle
+    Parameters
+    ----------
+    img
+    rect
+
+    Returns
+    -------
+
+    """
+    return cv2.rectangle(img, (rect[0], rect[1]), (rect[2], rect[3]), color=(0, 255, 0), thickness=2)
+
+
+def save_image(img, name):
+    """
+    save image
+    Parameters
+    ----------
+    name
+    img
+
+    Returns
+    -------
+
+    """
+    cv2.imwrite(os.path.join(OUTPUT_FOLDER_PATH, str(name) + '.jpg'), img * 255.0)
+
+
+def predicted_box(predicted_output):
+    """
+    convert predicted output to rectangle
+    Parameters
+    ----------
+    predicted_output
+
+    Returns
+    -------
+
+    """
+    boxes = decode(predicted_output[0], img_w, img_h, IOU)
+    rectangles = []
+    for r in boxes:
+        rectangles.append([int(p) for p in r])
+    return rectangles
+
+
+def show_image(img):
+    """
+    plot image
+    Parameters
+    ----------
+    img
+
+    Returns
+    -------
+
+    """
+    plt.imshow(img)
+    plt.show()
